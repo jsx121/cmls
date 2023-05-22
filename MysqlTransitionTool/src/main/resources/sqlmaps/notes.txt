@@ -1,0 +1,9 @@
+Organize the SQL maps by database and then in whichever packages make the most sense, like
+obviously a module will be top-level under a database-specific folder.
+
+Keep things as organized as possible.
+
+I'm not using the "master" terminology and it's a term being phased out in the industry.
+
+Instead, the "master" SQL map files for MyBatis are called "config" here and will contain
+all the configuration details for a specific DB client.

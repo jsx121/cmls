@@ -1,0 +1,96 @@
+Make absolutely sure you understand how MySQL works. I think SQL Server or Postgres would've been a far better choice for the project, but it's not my decision. There are server costs in the cloud but there's also costs in development, administration, replication, troubleshooting, etc.
+
+Pavan is generally too conservative with changes and I strongly recommend pushing back against this when it makes sense. I've gotten in trouble multiple times over the years attempting to do the minimum/do it his way. Don't be like me. Sometimes you just have to do more work than he thinks. Carefully look at the benefits of doing more work than he wants and pushing back if it makes sense. For example, he wants to narrowly focus on some tables for this effort, but you might not be able to - the application needs a bunch of other tables and if you don't pull the other tables in, suddenly you have to figure out how to cross-communicate with databases and potentially keep extra things in sync that just aren't worth the effort when you could simply convert them to MySQL.
+
+Honestly, if I had my pick, I'd 100% convert CMLS to MySQL rather than try to find a subset. Set up a full deployment environment for a brand new CMLS and migrate all database queries over. It's a fully manageable problem and once you get into the swing of converting queries you'll see how easy it is to keep going.
+
+Of course, if you CAN get away with a narrow subset, then all the more power to you.
+
+-----
+
+MySQL Documentation: https://dev.mysql.com/doc/refman/8.0/en/dynindex-statement.html
+
+Here's the big things you should research/learn:
+
+- Overall, your key mission is to understand the capabilities of MySQL: what it does/doesn't support and its quirks.
+
+- https://dba.stackexchange.com/questions/177569/is-mysql-acid-compliant
+  https://en.wikipedia.org/wiki/InnoDB
+  http://www.bailis.org/blog/when-is-acid-acid-rarely/
+
+  Make sure you understand what aspects of MySQL are ACID compliant and which aren't. If you're not paying attention, and the
+  wrong choices are made in deployment, you WILL pay the price in the future. You can manage a non-fully-ACID-compliant database,
+  but if you have one that's not fully compliant and you EXPECT it to be, that's where you get in trouble.
+
+- https://dev.mysql.com/doc/refman/8.0/en/data-types.html
+  https://dev.mysql.com/doc/refman/8.0/en/numeric-types.html
+  https://dev.mysql.com/doc/refman/8.0/en/date-and-time-types.html
+  https://dev.mysql.com/doc/refman/8.0/en/date-and-time-types.html
+  https://dev.mysql.com/doc/refman/8.0/en/string-types.html
+  https://dev.mysql.com/doc/refman/8.0/en/json.html
+
+  Data types. The importance here should be obvious.
+
+- There's a PR I put up in December that aims to remove the aggregate handling as mandatory. If that PR hasn't received any love, then I strongly
+recommend it receive some love at some point. You'll remove some of the headache of a DB migration without needing to worry about the aggregate events
+table. However, it's still written to even after it becomes an "optional" part of the functionality, so you'll want to investigate things like 'JSON' data type in MySQL.
+
+- Focus on the SQL maps first. Convert all the queries. Get the existing CMLS sql maps into a tool (either the one I'm building
+  in the git repository or the one I already have developed, it'll probably be easier to take what I have in the git repo and
+  copy it into the other tool though)
+
+- Worry about SqlBuilder/insert/update/delete queries later. There should be minimal changes required here.
+
+- FlexibleDate in the application is mostly successful but I don't think it's perfect. It's one point where you'll probably have a little friction, but just make some test cases for it, like in the tool I'm providing in the git repo, and exhaustively test different data scenarios.
+
+- I *strongly* recommend letting SqlBuilder do the job of populating the INS_DATE/UPD_DATE columns in the DB tables and taking ALL of
+  this out of the application logic. This single key change will make it so you'll have a high degree of confidence the replication
+  will always work and you'll never see a ticket again about UPD_DATE/INS_DATE not being populated. Just roll this into the DB migration work.
+  The pay off is worth it. The INS_DATE should be easiest: simply let the DB populate it via a default value. Then let SqlBuilder consistently
+  populate UPD_DATE in SqlBuilder, or add triggers to DB on table updates to populate the UPD_DATE. The business logic should NOT be responsible
+  for updating these columns.
+
+DB Conversion to MySQL
+----------------------
+
+Have a MySQL instance that you can completely wipe out and re-build as needed, either an instance or a schema. But if you're sharing it with anyone else, make sure you're extra careful about DB operations and only working inside YOUR sandbox.
+
+Pull the list of tables you're starting with, translate the CREATE TABLE statement into something that MySQL can use. I recommend keeping the primary key, but ignoring foreign keys and indexes. In the short term, foreign keys will add friction to the migration process. In the long term, you may or may not want foreign keys. I lean toward not being a fan of them provided the application code is doing its job of enforcing relationships. As for indexes, you'll want to be REALLY careful about how many indexes you add on tables. They add to DB contention. Read my previous document I sent out on database indexing, a lot of the concepts are general and apply to any RDBMS.
+
+Every single thing you do with the DB should be repeatable. Do not make schema adjustments on the fly: once you have a script that creates the full schema, only ever modify THAT script. You can rebuild tables individually or the entire DB, but having this script and ensuring it is the "golden master" will make your life that much easier.
+
+I recommend adding a "db_version" table, and start versioning the database schema. But that's just a nice to have feature.
+
+You'll need the JDBC drivers for MySQL which should be at: https://dev.mysql.com/downloads/windows/installer/8.0.html
+
+Looks like you'll need to run the installer so have fun with CIS. I'm putting a copy of the JDBC driver in the git repo but I recommend not trusting mine - trust the official one.
+
+Before I left, I placed my cmlsdbtool application out on the MSC-XFR drive, refer to my previously sent notes for more specifics. But either in my cmlsdbtool or in a related project (that I know George has experience with, I forget the name of it) is my code for originally doing the conversion to SQL Server. The importance of this tool is making it really easy to work with SQL maps without needing a web application, as well as providing a way to query BOTH databases with the same queries and compare the resulting data. The Git repo contains a tool that primes this for MySQL, but really, it's me re-writing what's already out on the MSC-XFR drive.
+
+The approach to converting to MySQL is the same.
+
+The general steps are:
+
+1) Identify tables you want to convert
+
+2) Manually convert them to create the tables on MySQL
+
+3) Export data from Sybase, import into MySQL. Go table by table. You may find some data will need conversions, you'll need to work that out on a case-by-case basis. Save these data scripts so you can easily re-create the tables in MySQL with actual CMLS data.
+
+4) Repeat the process for the views. Queries in the application commonly use views so you can't really get to the MyBatis SQL Map conversions until all views are brought over. I recommend exporting the creation script for ALL the views in Sybase, then searching within this script for the tables you identified in #1. This way you can find all the views you'll need. Make a list. Maintain this list. As you dig into the views you may find the list of tables you identified in #1 grows - this is what I warned about at top. Sometimes the scope just isn't as narrow as it seems. Converting the views SHOULD be the hardest part of this whole process, as you may have to rewrite queries based on MySQL's SQL syntax and what it does/doesn't support.
+
+After all the views are converted you're most of the way there.
+
+5) Identify all SQL maps that you're going to convert to MySQL. These are the "sybase sql maps"
+
+6) Clear out all SQL maps alerady in the tool (really, just copy/paste the tool code elsewhere and go crazy with changing it, bonus points if you use a local git repo just to retain anything you delete) This may vary if you decide to START with my mostly empty tool in the git repo.
+
+7) Place these SQL maps into the tool, these will be your original SQL maps which will still be used to hit Sybase
+
+8) Test the existing SQL maps! Make sure you can contact Sybase. Always make small changes and verify along the way.
+
+9) Copy one SQL map at a time, from sybase and into mysql (the package structure in the java tool), create one test method in the TestExecutor class (if you're using the code in the git repo) for each query, and then convert the queries. Update the code in Main to call the new test method. Set up any models you need along the way, etc.
+
+10) Run the tool. Ultimately you should see it hitting both Sybase and MySQL, running the exact same query (but located in different SQL maps), and hopefully getting the exact same data. If you don't get the same data then you know you have something to fix, which will come down to either a data fix (it's possibly you may truncate data or convert it wrong with the export/import and selection of data types) or a query fix, which could be in the SQL map or could be in a referenced view.
+
+Repeat whatever steps above are necessary until you get all the tables/views/sql maps/data in and you're seeing 100% same results between the two databases.

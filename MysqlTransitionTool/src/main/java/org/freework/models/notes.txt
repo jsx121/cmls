@@ -1,0 +1,7 @@
+The ultimate objective is to have models that support both databases.
+
+I expect most models will be like this. Any models like this should be placed in the 'common' folder.
+
+Having the models in 'common' is the best case since you can directly compare those models with data from 2 databases.
+
+If you need to have models that are DB-specific, place them into their respective DB folder.

@@ -1,0 +1,5 @@
+Don't overthink working on these clients. This tool is to help with the development migration
+and isn't meant to be a long living tool. Don't over-design the code. Just get it done.
+
+Each DB server has a "Client" class. You can split querying up into child classes if you really
+want, or simply just grow each client with whatever queries are needed. Delineate with comments.

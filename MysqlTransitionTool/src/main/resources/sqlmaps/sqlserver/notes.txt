@@ -1,0 +1,5 @@
+Just stubbing this out. If I write any code that has to hit 2 databases locally it'll be
+MySQL and SQL Server since I am not wrestling with Sybase to try to find some version to install
+and run.
+
+You can safely ignore this for now.
